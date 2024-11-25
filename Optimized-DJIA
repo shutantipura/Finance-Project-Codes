@@ -1,0 +1,123 @@
+!pip install yfinance
+
+import yfinance as yf
+import pandas as pd
+import numpy as np
+
+tickers = [ "MMM","AXP","AMGN","AMZN","AAPL","BA","CAT","CVX","CSCO","KO","DIS","GS","HD","HON","IBM","JNJ","JPM","MCD","MRK","MSFT",
+"NKE","NVDA","PG","CRM","SHW","TRV","UNH","VZ","V","WMT"]  
+
+# Initialize an empty list to store returns for each ticker
+returns_list = []
+means = []
+
+for ticker in tickers:
+    # Download historical data
+    data = yf.download(ticker, start="2019-11-24", end="2024-11-24", interval="1wk")
+    df = pd.DataFrame(data)
+    
+    column = df['Adj Close'].values.tolist()  # Extract adjusted close prices
+    prices = np.array(column).reshape(-1)
+    
+    returns = np.array([])   # Calculate returns
+    for j in range(np.size(prices) - 1):
+        returns = np.append(returns, (prices[j+1] / prices[j] - 1))
+    
+    returns_list.append(returns)   # Append the returns array to the list
+    means.append(np.mean(returns))
+    
+# Determine the maximum length of returns arrays
+max_length = max(len(r) for r in returns_list)
+# Pad all arrays to the same length with np.nan and stack them into a 2D NumPy array
+returns_array = np.array([np.pad(r, (0, max_length - len(r)), constant_values=np.nan) for r in returns_list])
+
+cov_matrix = np.cov(returns_array)
+returns_list = np.array(returns_list)
+means = np.array(means)
+
+# Same Process for the Dow Index
+
+data = yf.download("^DJI", start="2019-11-24", end="2024-11-24", interval="1wk")
+df = pd.DataFrame(data)
+
+column = df['Adj Close'].values.tolist()
+prices = np.array(column).reshape(-1)
+returns = np.array([])
+
+for j in range(np.size(prices) - 1):
+    returns = np.append(returns, (prices[j+1] / prices[j] - 1))
+
+DJImean = np.mean(returns)
+DJIsigma = np.std(returns,ddof=1)
+
+print("DJIA mean",DJImean)
+print("DJIA sigma",DJIsigma)
+
+num_arrays = 1000000 # Number of random arrays
+num_elements = 30  # Number of elements in each array
+Rf = 0.00083
+
+# Generate random arrays
+weights = np.random.dirichlet(np.ones(num_elements), size=num_arrays)
+
+print(weights)
+meanp = []
+sigmap = []
+sharpe = 0
+
+for weight in weights:
+    portfoliovariance = np.dot(weight,np.dot(cov_matrix,weight.T))
+    portfoliosigma = np.sqrt(portfoliovariance)
+    sigmap.append(portfoliosigma)
+    portfoliomean = np.dot(weight,means.T)
+    meanp.append(portfoliomean)
+    
+    if (portfoliomean-Rf)/portfoliosigma > sharpe:
+        sharpe = (portfoliomean-Rf)/portfoliosigma
+        marketportfoliomean = portfoliomean; marketportfoliosigma = portfoliosigma
+        marketweight = weight
+
+sigmap = np.array(sigmap); meanp = np.array(meanp)
+print(sharpe)
+print(weight)
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
+
+print("market portfolio mean: ",marketportfoliomean)
+print("market portfolio sigma",marketportfoliosigma)
+print("DJI mean",DJImean)
+print("DJI sigma",DJIsigma)
+
+CMLx = 0.1
+CMLy = CMLx*(marketportfoliomean-Rf)/marketportfoliosigma + Rf
+
+DJIx = 0.1
+DJIy = DJIx*(DJImean-Rf)/DJIsigma + Rf
+
+fig, ax = plt.subplots()
+
+fig.set_size_inches(16, 8)
+
+ax.scatter(sigmap*100,meanp*100,color = 'blue')
+ax.scatter(marketportfoliosigma*100,marketportfoliomean*100,color = 'green')
+ax.scatter(DJIsigma*100,DJImean*100,color = 'orange')
+
+ax.set_xlim(0,max(sigmap)*100*1.5)
+ax.set_ylim(0,max(meanp)*100*1.5)
+ax.set_xlabel("Standard Deviation", fontsize = 18)
+ax.set_ylabel("Expected Weekly Returns", fontsize = 18)
+ax.set_title("Capital Market Line of stocks in the DJIA", fontsize = 20)
+
+ax.plot([0, CMLx*100], [Rf*100, CMLy*100], color='green', linestyle='-', linewidth=2)
+ax.plot([0, DJIx*100], [Rf*100, DJIy*100], color='orange', linestyle='-', linewidth=2)
+
+
+ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+ax.xaxis.set_major_formatter(mtick.PercentFormatter())
+
+stocks = ["MMM","AXP","AMGN","AMZN","AAPL","BA","CAT","CVX","CSCO","KO","DIS","GS","HD","HON","IBM","JNJ","JPM","MCD","MRK","MSFT",
+"NKE","NVDA","PG","CRM","SHW","TRV","UNH","VZ","V","WMT"]
+
+for x in range(0,len(marketweight)):
+    print(stocks[x],round(marketweight[x]*100,2),"%")
