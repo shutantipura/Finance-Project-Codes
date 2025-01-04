@@ -1,0 +1,60 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+ticker = "MSFT"
+SMAdays = 5
+
+data = yf.download(ticker, start="2020-12-22", end="2021-12-22", interval="1d")
+df = pd.DataFrame(data)
+closecolumn = df['Close'].values.tolist()
+prices = np.array(closecolumn).reshape(-1)
+
+close = []
+average = []
+buy = [1]
+holding = [prices[SMAdays]]
+
+for i in range(0,np.size(prices)-SMAdays):
+
+    # input today's closing price and past day average into "close" and "average"
+    close.append(prices[i+SMAdays])
+    average.append(np.average(prices[i:i+SMAdays]))
+
+    # given buy/no buy at yesterday's closing price, and today's closing price, this updates the today holding value
+    if buy[-1] == 1:
+        holding.append(holding[-1] * close[i] / close[i - 1])
+    else:
+        holding.append(holding[-1])
+
+    # given today's closing price and average, do we buy today at the closing price?
+    if close[-1] > average[-1]:
+        buy.append(1)
+    else:
+        buy.append(0)
+
+#we don't want the initial 1st day opening holding value. we start plotting at the 1st day closing holding value.
+holding.pop(0)
+buy.pop(0)
+
+print(buy)
+
+#plotting
+x = range(0,np.size(close))
+plt.plot(x,close,color = 'blue',label = 'closing price')
+plt.plot(x,holding, color = 'black', label = "holding value")
+plt.plot(x,average, color = 'brown', label = "simple average of past prices")
+plt.legend()
+
+for i in range(len(buy)):
+    if buy[i] == 1:
+        plt.axvspan(x[i], x[i + 1] if i + 1 < len(x) else x[i], color="green", alpha=0.1)
+    else:
+        plt.axvspan(x[i], x[i + 1] if i + 1 < len(x) else x[i], color="red", alpha=0.1)
+
+plt.title("SMA Strategy for "+ticker)
+plt.xlabel("Days")
+plt.ylabel("Price")
+
+plt.show()
