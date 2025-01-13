@@ -1,0 +1,81 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import pearsonr
+
+ticker = "XOM"
+
+data = yf.download(ticker, start="2023-01-01", end="2025-01-01", interval="1d") #yyyy-mm-dd
+df = pd.DataFrame(data)
+
+volumecolumn = df['Volume'].values.tolist()        # fetch the prices and volumes data from yahoo finance into a list
+closecolumn = df['Close'].values.tolist()
+
+volumes = np.array(volumecolumn).reshape(-1)       # turn column list into row array
+prices = np.array(closecolumn).reshape(-1)
+
+# parameters:
+n = 10                  # look back period in days
+sig_level = 0.10        # significance level of the pearson correlation test
+
+# other lists
+signals = [1]                       # 0 means sell, 1 means buy
+holdings = [prices[n-1]]            # investor holdings, starting from day n-1
+time = range(0,np.size(prices)-n+1) # time=0 at day n-1, up to end period, inclusive
+
+r_values = []
+p_values = []
+
+for i in range(n,np.size(prices)):
+    localprices = prices[i-n:i]                                                 # fetch the data of the last n days
+    localvolumes = volumes[i-n:i]
+    r,p_value = pearsonr(localprices,localvolumes,alternative='two-sided')      # 2-tailed hypothesis T-test
+    r_values.append(r)
+    p_values.append(p_value)
+
+    if p_value > sig_level:
+        signals.append(1)           # if not statistically significant, buy signal
+    else:
+        if r > 0:
+            signals.append(1)       # if statistically significant AND positive correlation, buy signal
+        else:
+            signals.append(0)       # if statistically significant AND negative correlation, sell signal
+
+signals.pop(0)
+
+percentagechange = []               # list of day to day percentage change in prices
+
+for i in range(0,np.size(signals)):
+    if signals[i] == 0:
+        holdings.append(holdings[-1])                                   # updates holdings given a sell signal
+    if signals[i] == 1:
+        holdings.append(holdings[-1] * prices[i+n] / prices[i+n-1])     # updates holdings given a buy signal
+    percentagechange.append((prices[i+n] / prices[i+n-1])-1)
+
+prices = prices[n-1:np.size(prices)]
+volumes = volumes[n-1:np.size(volumes)]
+
+r2,p_value2 = pearsonr(percentagechange,r_values)
+
+print(prices[-1]*100/prices[0] - 1,'% raw price percentage returns')
+print(holdings[-1]*100/holdings[0] - 1,'%  following the strategy percent returns')
+print(r2, ' correlation coefficient between price percentage returns and price-volume correlation')
+
+#plotting the data
+plt.plot(time,prices,color = 'blue',label = 'closing price')
+plt.plot(time,holdings, color = 'black', label = "holding value")
+plt.legend()
+
+#green/red buy/sell color plot
+for i in range(len(signals)):
+    if signals[i] == 1:
+        plt.axvspan(time[i], time[i + 1] if i + 1 < len(time) else time[i], color="green", alpha=0.1)
+    else:
+        plt.axvspan(time[i], time[i + 1] if i + 1 < len(time) else time[i], color="red", alpha=0.1)
+
+#labeling title and axes
+plt.title("Volume Strategy for "+ticker)
+plt.xlabel("Days")
+plt.ylabel("Price")
+plt.show()
